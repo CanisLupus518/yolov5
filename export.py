@@ -544,7 +544,7 @@ def run(
     if jit:  # TorchScript
         f[0], _ = export_torchscript(model, im, file, optimize)
     if engine:  # TensorRT required before ONNX
-        f[1], _ = export_engine(model, im, file, half, int8, dynamic, simplify, workspace, verbose, source, calib_cache,
+        f[1], _ = export_engine(model, im, file, half, int8, dynamic, simplify, workspace, verbose, source,
                                 batch_size, calib_preprocessor)
     if onnx or xml:  # OpenVINO requires ONNX
         f[2], _ = export_onnx(model, im, file, opset, dynamic, simplify)
