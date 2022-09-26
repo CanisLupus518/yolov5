@@ -85,7 +85,7 @@ def export_formats():
         ['TensorFlow GraphDef', 'pb', '.pb', True, True],
         ['TensorFlow Lite', 'tflite', '.tflite', True, False],
         ['TensorFlow Edge TPU', 'edgetpu', '_edgetpu.tflite', False, False],
-        ['TensorFlow.js', 'tfjs', '_web_model', False, False],]
+        ['TensorFlow.js', 'tfjs', '_web_model', False, False], ]
     return pd.DataFrame(x, columns=['Format', 'Argument', 'Suffix', 'CPU', 'GPU'])
 
 
@@ -219,7 +219,9 @@ def export_coreml(model, im, file, int8, half, prefix=colorstr('CoreML:')):
 
 
 @try_export
-def export_engine(model, im, file, half, dynamic, simplify, workspace=4, verbose=False, prefix=colorstr('TensorRT:')):
+def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, verbose=False,
+                  prefix=colorstr('TensorRT:'),
+                  calib_input=None, calib_cache=None, calib_batch_size=8, calib_preprocessor=None):
     # YOLOv5 TensorRT export https://developer.nvidia.com/tensorrt
     assert im.device.type != 'cpu', 'export running on CPU but must be on GPU, i.e. `python export.py --device 0`'
     try:
@@ -274,8 +276,22 @@ def export_engine(model, im, file, half, dynamic, simplify, workspace=4, verbose
         config.add_optimization_profile(profile)
 
     LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine in {f}')
-    if builder.platform_has_fast_fp16 and half:
+    if builder.platform_has_fast_fp16 and half and not int8:
         config.set_flag(trt.BuilderFlag.FP16)
+
+    if builder.platform.platform_has_fast_int8 and int8:
+        import utils.trt.classes as trt_classes
+        from image_batcher import ImageBatcher
+
+        config.set_flag(trt.BuilderFlag.INT8)
+        config.int8_calibrator = trt_classes.EngineCalibrator(calib_cache)
+        if not os.path.exists(calib_cache):
+            calib_shape = [calib_batch_size] + list(inputs[0].shape[1:])
+            calib_dtype = trt.nptype(inputs[0].dtype)
+            config.int8_calibrator.set_image_batcher(
+                ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=25000,
+                             exact_batches=True, preprocessor=calib_preprocessor))
+
     with builder.build_engine(network, config) as engine, open(f, 'wb') as t:
         t.write(engine.serialize())
     return f, None
@@ -426,9 +442,9 @@ def export_tfjs(file, prefix=colorstr('TensorFlow.js:')):
             r'"Identity.?.?": {"name": "Identity.?.?"}, '
             r'"Identity.?.?": {"name": "Identity.?.?"}, '
             r'"Identity.?.?": {"name": "Identity.?.?"}}}', r'{"outputs": {"Identity": {"name": "Identity"}, '
-            r'"Identity_1": {"name": "Identity_1"}, '
-            r'"Identity_2": {"name": "Identity_2"}, '
-            r'"Identity_3": {"name": "Identity_3"}}}', json)
+                                                           r'"Identity_1": {"name": "Identity_1"}, '
+                                                           r'"Identity_2": {"name": "Identity_2"}, '
+                                                           r'"Identity_3": {"name": "Identity_3"}}}', json)
         j.write(subst)
     return f, None
 
@@ -458,6 +474,9 @@ def run(
         topk_all=100,  # TF.js NMS: topk for all classes to keep
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
+        source=None,
+        calib_cache=None,
+        calib_preprocessor=None
 ):
     t = time.time()
     include = [x.lower() for x in include]  # to lowercase
@@ -505,7 +524,8 @@ def run(
     if jit:
         f[0], _ = export_torchscript(model, im, file, optimize)
     if engine:  # TensorRT required before ONNX
-        f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
+        f[1], _ = export_engine(model, im, file, half, int8, dynamic, simplify, workspace, verbose, source, calib_cache,
+                                batch_size, calib_preprocessor)
     if onnx or xml:  # OpenVINO requires ONNX
         f[2], _ = export_onnx(model, im, file, opset, train, dynamic, simplify)
     if xml:  # OpenVINO
@@ -576,6 +596,13 @@ def parse_opt():
     parser.add_argument('--topk-all', type=int, default=100, help='TF.js NMS: topk for all classes to keep')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='TF.js NMS: IoU threshold')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='TF.js NMS: confidence threshold')
+    parser.add_argument("--source", help="The directory holding images to use for calibration")
+    parser.add_argument("--calib-cache", default="./calibration.cache",
+                        help="TensorRT INT8: The file path for INT8 calibration cache to use, default: "
+                             "./calibration.cache")
+    parser.add_argument("--calib-preprocessor", default="V2", choices=["V1", "V1MS", "V2"],
+                        help="TensorRT INT8: Set the calibration image preprocessor to use, either 'V2', 'V1' or "
+                             "'V1MS', default: V2")
     parser.add_argument('--include',
                         nargs='+',
                         default=['torchscript'],
