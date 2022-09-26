@@ -5,7 +5,7 @@ import pycuda.driver as cuda
 import pycuda.autoinit
 import numpy as np
 
-from image_batcher import ImageBatcher
+from utils.trt.image_batcher import ImageBatcher
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("EngineBuilder").setLevel(logging.INFO)
