@@ -293,7 +293,7 @@ def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, v
             profile.set_shape(inp.name, (1, *im.shape[1:]), (max(1, im.shape[0] // 2), *im.shape[1:]), im.shape)
         config.add_optimization_profile(profile)
 
-    LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine in {f}')
+    LOGGER.info(f'{prefix} building {"INT8" if builder.platform_has_fast_int8 and int8 else "FP16" if builder.platform_has_fast_fp16 and half else "FP32"} engine in {f}')
     if builder.platform_has_fast_fp16 and half and not int8:
         config.set_flag(trt.BuilderFlag.FP16)
 
