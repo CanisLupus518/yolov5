@@ -239,8 +239,7 @@ def export_coreml(model, im, file, int8, half, prefix=colorstr('CoreML:')):
 
 @try_export
 def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, verbose=False,
-                  prefix=colorstr('TensorRT:'),
-                  calib_input=None, calib_batch_size=8, calib_preprocessor=None):
+                  calib_input=None, calib_batch_size=8, calib_preprocessor=None, prefix=colorstr('TensorRT:')):
     # YOLOv5 TensorRT export https://developer.nvidia.com/tensorrt
     assert im.device.type != 'cpu', 'export running on CPU but must be on GPU, i.e. `python export.py --device 0`'
     try:
