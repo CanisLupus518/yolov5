@@ -240,7 +240,7 @@ def export_coreml(model, im, file, int8, half, prefix=colorstr('CoreML:')):
 @try_export
 def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, verbose=False,
                   prefix=colorstr('TensorRT:'),
-                  calib_input=None, calib_cache=None, calib_batch_size=8, calib_preprocessor=None):
+                  calib_input=None, calib_batch_size=8, calib_preprocessor=None):
     # YOLOv5 TensorRT export https://developer.nvidia.com/tensorrt
     assert im.device.type != 'cpu', 'export running on CPU but must be on GPU, i.e. `python export.py --device 0`'
     try:
@@ -298,11 +298,12 @@ def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, v
         config.set_flag(trt.BuilderFlag.FP16)
 
     if builder.platform.platform_has_fast_int8 and int8:
-        import utils.trt.classes as trt_classes
-        from image_batcher import ImageBatcher
+        from utils.trt.engine_calibrator import EngineCalibrator
+        from utils.trt.image_batcher import ImageBatcher
 
         config.set_flag(trt.BuilderFlag.INT8)
-        config.int8_calibrator = trt_classes.EngineCalibrator(calib_cache)
+        calib_cache = file.with_suffix('.cache')
+        config.int8_calibrator = EngineCalibrator(calib_cache)
         if not os.path.exists(calib_cache):
             calib_shape = [calib_batch_size] + list(inputs[0].shape[1:])
             calib_dtype = trt.nptype(inputs[0].dtype)
@@ -494,7 +495,6 @@ def run(
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
         source=None,
-        calib_cache=None,
         calib_preprocessor=None
 ):
     t = time.time()
@@ -614,12 +614,8 @@ def parse_opt():
     parser.add_argument('--iou-thres', type=float, default=0.45, help='TF.js NMS: IoU threshold')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='TF.js NMS: confidence threshold')
     parser.add_argument("--source", help="The directory holding images to use for calibration")
-    parser.add_argument("--calib-cache", default="./calibration.cache",
-                    help="TensorRT INT8: The file path for INT8 calibration cache to use, default: "
-                         "./calibration.cache")
     parser.add_argument("--calib-preprocessor", default="V2", choices=["V1", "V1MS", "V2"],
-                    help="TensorRT INT8: Set the calibration image preprocessor to use, either 'V2', 'V1' or "
-                         "'V1MS', default: V2")
+                    help="TensorRT INT8: Set the calibration image preprocessor to use, either 'V2', 'V1' or 'V1MS'")
     parser.add_argument(
         '--include',
         nargs='+',
