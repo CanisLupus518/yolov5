@@ -297,7 +297,7 @@ def export_engine(model, im, file, half, int8, dynamic, simplify, workspace=4, v
     if builder.platform_has_fast_fp16 and half and not int8:
         config.set_flag(trt.BuilderFlag.FP16)
 
-    if builder.platform.platform_has_fast_int8 and int8:
+    if builder.platform_has_fast_int8 and int8:
         from utils.trt.engine_calibrator import EngineCalibrator
         from utils.trt.image_batcher import ImageBatcher
 
